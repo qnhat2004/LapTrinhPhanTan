@@ -2,6 +2,11 @@ package org.example.BaiToanLoaiTruLanNhau;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+interface Lock {
+    public void requestCS(int pid);
+    public void releaseCS(int pid);
+}
+
 public class LockImpl {
     // Algo 1
     public class Attempt1 {
@@ -32,22 +37,68 @@ public class LockImpl {
     }
 
     // Peterson's Algorithm
-    public class Attempt3 {
+    public class Attempt3 implements Lock {
         volatile int turn = 1;
         volatile boolean wantCS[] = {false, false};
+        @Override
         public void requestCS(int i) {
             int j = 1 - i;
             wantCS[i] = true;
             turn = j;
             while (wantCS[j] && turn == j); // wait
         }
+        @Override
         public void releaseCS(int i) {
             wantCS[i] = false;
         }
     }
 
+    // Bakery Algorithm
+    public class Bakery implements Lock {
+        int N;
+        boolean[] choosing;
+        int[] number;
+
+        public Bakery(int numProcesses) {
+            N = numProcesses;
+            choosing = new boolean[N];
+            number = new int[N];
+            for (int j = 0; j < N; j++) {
+                choosing[j] = false;
+                number[j] = 0;
+            }
+        }
+
+        @Override
+        public void requestCS(int i) {
+            // Bước 1: Đánh dấu rằng mình đang muốn vào vùng CS (doorway: choose a number)
+            choosing[i] = true;
+            for (int j = 0; j < N; j++) {
+                if (number[j] > number[i]) {
+                    number[i] = number[j];
+                }
+            }
+            number[i]++;
+            choosing[i] = false;
+
+            // Bước 2: Chờ cho đến khi không ai muốn vào vùng CS (check if my number is the smallest)
+            for (int j = 0; j < N; j++) {
+                while (choosing[j]); // process j in doorway
+                while ((number[j] != 0) &&
+                        ((number[j] < number[i]) ||
+                                (number[j] == number[i] && j < i))); // process j in doorway
+            }
+        }
+
+        @Override
+        public void releaseCS(int i) {
+            number[i] = 0;
+        }
+    }
+
+    static int x = 0;
     public void program() {
-        AtomicInteger x = new AtomicInteger(0); // Biến dùng chung giữa các thread
+//        AtomicInteger x = new AtomicInteger(0); // Biến dùng chung giữa các thread
 
         Attempt3 algo = new Attempt3();
 
@@ -55,7 +106,8 @@ public class LockImpl {
         Thread t1 = new Thread(() -> {
             for (int i = 0; i < 10; i++) {
                 algo.requestCS(0);
-                int newValue = x.incrementAndGet(); // Tăng giá trị x an toàn trong môi trường đa luồng
+//                int newValue = x.incrementAndGet(); // Tăng giá trị x an toàn trong môi trường đa luồng
+                int newValue = ++x;
                 System.out.println("T1 - x = " + newValue);
                 algo.releaseCS(0);
             }
@@ -65,7 +117,8 @@ public class LockImpl {
         Thread t2 = new Thread(() -> {
             for (int i = 0; i < 10; i++) {
                 algo.requestCS(1);
-                int newValue = x.incrementAndGet(); // Tăng giá trị x an toàn trong môi trường đa luồng
+//                int newValue = x.incrementAndGet(); // Tăng giá trị x an toàn trong môi trường đa luồng
+                int newValue = ++x;
                 System.out.println("T2 - x = " + newValue);
                 algo.releaseCS(1);
             }
@@ -84,7 +137,8 @@ public class LockImpl {
         }
 
         // In giá trị cuối cùng của x
-        System.out.println("Final value of x = " + x.get());
+//        System.out.println("Final value of x = " + x.get());
+        System.out.println("Final value of x = " + x);
     }
 
     public static void main(String[] args) {
